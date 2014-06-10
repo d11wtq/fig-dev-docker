@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# This is an init script to start docker inside docker and is based on:
+#
+#   https://github.com/jpetazzo/dind/blob/master/wrapdocker
+#
+# We use devicemapper, since it doesn't require mounting a volume to the host
+# OS, however this has implications for cleanup, since the loop device will not
+# be unmounted by Docker, so we need to unmount it on stop.
+
+PIDFILE=/var/run/docker.pid
+DRIVER=devicemapper
+LOGFILE=/var/log/docker.log
+
+running() {
+  [[ -f $PIDFILE && -d "/proc/`cat $PIDFILE`" ]]
+}
+
+start() {
+  if [[ -f $PIDFILE ]]
+  then
+    echo "Pidfile found. Is docker already running?"
+    exit 1
+  fi
+
+  # First, make sure that cgroups are mounted correctly.
+  CGROUP=/sys/fs/cgroup
+
+  mkdir -p $CGROUP
+
+  mountpoint -q $CGROUP ||
+    mount -n -t tmpfs -o uid=0,gid=0,mode=0755 cgroup $CGROUP || {
+      echo "Could not make a tmpfs mount. Did you use -privileged?"
+      exit 1
+    }
+
+  if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security
+  then
+    mount -t securityfs none /sys/kernel/security || {
+      echo "Could not mount /sys/kernel/security."
+      exit 1
+    }
+  fi
+
+  # Mount the cgroup hierarchies exactly as they are in the parent system.
+  for SUBSYS in $(cut -d: -f2 /proc/1/cgroup)
+  do
+    mkdir -p $CGROUP/$SUBSYS
+    mountpoint -q $CGROUP/$SUBSYS ||
+      mount -n -t cgroup -o $SUBSYS cgroup $CGROUP/$SUBSYS
+  done
+
+  # Start docker daemonized
+  if ! docker -p $PIDFILE -d -s $DRIVER > $LOGFILE 2>&1 &
+  then
+    echo "Docker failed to start."
+    exit 1
+  fi
+
+  # Wait for docker to be initialized
+  while ! running
+  do
+    sleep 0.1
+  done
+}
+
+stop() {
+  # Kill docker if it's running
+  while running
+  do
+    kill -TERM `cat $PIDFILE`
+    sleep 0.1
+  done
+
+  # Remove the pidfile in any case
+  rm -f $PIDFILE
+
+  # Unmount devicemapper to free up loopback devices
+  while [[ `grep -F /var/lib/docker /proc/mounts` ]]
+  do
+    umount -f /var/lib/docker
+    sleep 0.1
+  done
+}
+
+status() {
+  if running
+  then
+    echo "Docker is running."
+    exit 0
+  else
+    echo "Docker is stopped."
+    exit 1
+  fi
+}
+
+# Dispatch appropriate function.
+case "$1" in
+  start)
+    start
+    exit 0
+  ;;
+  stop)
+    stop
+    exit 0
+  ;;
+  restart|reload|force-reload)
+    stop && start
+    exit 0
+  ;;
+  status)
+    status
+    exit 0
+  ;;
+  **)
+    echo "Usage: $0 {start|stop|restart|status}" 1>&2
+    exit 1
+  ;;
+esac
