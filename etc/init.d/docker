@@ -36,7 +36,7 @@ start() {
 
   mountpoint -q $CGROUP ||
     mount -n -t tmpfs -o uid=0,gid=0,mode=0755 cgroup $CGROUP || {
-      echo "Could not make a tmpfs mount. Did you use -privileged?"
+      echo "Could not make a tmpfs mount. Did you use --privileged?"
       exit 1
     }
 
@@ -88,7 +88,14 @@ stop() {
     sleep 0.1
   done
 
-  # Unmount to cgroup hierarchy
+  # Unmount /sys/kernel/security
+  while [[ `grep -F /sys/kernel/security /proc/mounts` ]]
+  do
+    umount -f /sys/kernel/security
+    sleep 0.1
+  done
+
+  # Unmount the cgroup hierarchy
   while [[ `grep -F $CGROUP /proc/mounts` ]]
   do
     umount -f $CGROUP/*
