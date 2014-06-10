@@ -8,9 +8,17 @@
 # OS, however this has implications for cleanup, since the loop device will not
 # be unmounted by Docker, so we need to unmount it on stop.
 
+# Where to store the pidfile
 PIDFILE=/var/run/docker.pid
+
+# This is probably the only driver that works
 DRIVER=devicemapper
+
+# Where to store the logs (stdout/stderr)
 LOGFILE=/var/log/docker.log
+
+# Where cgroups should be mounted
+CGROUP=/sys/fs/cgroup
 
 running() {
   [[ -f $PIDFILE && -d "/proc/`cat $PIDFILE`" ]]
@@ -24,8 +32,6 @@ start() {
   fi
 
   # First, make sure that cgroups are mounted correctly.
-  CGROUP=/sys/fs/cgroup
-
   mkdir -p $CGROUP
 
   mountpoint -q $CGROUP ||
@@ -34,7 +40,7 @@ start() {
       exit 1
     }
 
-  if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security
+  if [[ -d /sys/kernel/security ]] && ! mountpoint -q /sys/kernel/security
   then
     mount -t securityfs none /sys/kernel/security || {
       echo "Could not mount /sys/kernel/security."
@@ -79,6 +85,14 @@ stop() {
   while [[ `grep -F /var/lib/docker /proc/mounts` ]]
   do
     umount -f /var/lib/docker
+    sleep 0.1
+  done
+
+  # Unmount to cgroup hierarchy
+  while [[ `grep -F $CGROUP /proc/mounts` ]]
+  do
+    umount -f $CGROUP/*
+    umount -f $CGROUP
     sleep 0.1
   done
 }
