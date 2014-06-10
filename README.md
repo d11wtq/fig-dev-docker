@@ -44,4 +44,5 @@ devices are unmounted when the container exits.
 The init script also prepares the necessary cgroup mounts if they do not yet
 exist.
 
-See [etc/init.d/docker] and [.bashrc] if you're interested in the code.
+See [etc/init.d/docker](etc/init.d/docker) and [.bashrc](.bashrc) if you're
+interested in the code.
