@@ -11,7 +11,7 @@ RUN sudo usermod default -aG docker
 RUN sudo apt-get update -qq -y
 RUN sudo apt-get install -qq -y iptables ca-certificates
 
-ADD https://get.docker.io/builds/Linux/x86_64/docker-0.11.1 /usr/local/bin/docker
+ADD https://get.docker.io/builds/Linux/x86_64/docker-0.12.0 /usr/local/bin/docker
 ADD etc/init.d/docker /etc/init.d/docker
 ADD .bashrc           /home/default/.bashrc
 
